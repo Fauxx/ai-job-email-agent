@@ -14,7 +14,8 @@ load_dotenv()
 EMAIL_USER = os.getenv("IMAP_USER")
 EMAIL_PASS = os.getenv("IMAP_PASS")
 GEMINI_KEY = os.getenv("GEMINI_API_KEY")
-WEBHOOK_URL = os.getenv("WEBHOOK_URL")
+TELEGRAM_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
+TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
 
 genai.configure(api_key=GEMINI_KEY)
 model = genai.GenerativeModel('gemini-2.5-flash')
@@ -53,14 +54,21 @@ def analyze_with_ai(sender, subject, body):
         return {"is_job_related": False, "error": str(e)}
 
 def send_alert(company, type_, summary):
-    if not WEBHOOK_URL:
-        print("No Webhook URL configured. Alerting in console only.")
+    if not TELEGRAM_TOKEN or not TELEGRAM_CHAT_ID:
+        print("No Telegram credentials configured. Alerting in console only.")
         return
         
+    message = f"🚨 *JOB ALERT: {company}* 🚨\n*Type:* {type_}\n*Summary:* {summary}"
+    url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
     payload = {
-        "content": f"🚨 **JOB ALERT: {company}** 🚨\n**Type:** {type_}\n**Summary:** {summary}"
+        "chat_id": TELEGRAM_CHAT_ID,
+        "text": message,
+        "parse_mode": "Markdown"
     }
-    requests.post(WEBHOOK_URL, json=payload)
+    
+    response = requests.post(url, json=payload)
+    if response.status_code != 200:
+        print(f"Failed to send Telegram alert: {response.text}")
 
 def run_email_agent():
     print("🔍 Connecting to inbox...")
