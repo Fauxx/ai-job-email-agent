@@ -1,3 +1,4 @@
+import time
 import os
 import imaplib
 import email
@@ -126,6 +127,7 @@ def run_email_agent():
                 print(f"👀 Scanning: {subject[:40]}...")
                 ai_result = analyze_with_ai(sender, subject, body)
                 
+                time.sleep(4)
                 if ai_result.get("is_job_related"):
                     print(f"✅ Alert Triggered for {ai_result.get('company_name')}")
                     send_alert(
