@@ -54,17 +54,18 @@ def analyze_with_ai(sender, subject, body):
         print(f"🚨 EXCEPTION: {e}")
         return {"is_job_related": False, "error": str(e)}
 
-def send_alert(company, type_, summary):
+def send_alert(company, type_, summary, link):
     if not TELEGRAM_TOKEN or not TELEGRAM_CHAT_ID:
         print("No Telegram credentials configured. Alerting in console only.")
         return
         
-    message = f"🚨 *JOB ALERT: {company}* 🚨\n*Type:* {type_}\n*Summary:* {summary}"
+    message = f"🚨 *JOB ALERT: {company}* 🚨\n*Type:* {type_}\n*Summary:* {summary}\n\n🔗 [Open Email in Gmail]({link})"
     url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
     payload = {
         "chat_id": TELEGRAM_CHAT_ID,
         "text": message,
-        "parse_mode": "Markdown"
+        "parse_mode": "Markdown",
+        "disable_web_page_preview": True
     }
     requests.post(url, json=payload)
 
@@ -74,7 +75,6 @@ def run_email_agent():
     mail.login(EMAIL_USER, EMAIL_PASS)
     mail.select("inbox")
 
-    # Load the last checked UID from GitHub Cache
     last_uid = 0
     if os.path.exists("cache/last_uid.txt"):
         with open("cache/last_uid.txt", "r") as f:
@@ -85,16 +85,12 @@ def run_email_agent():
     print(f"📂 Last processed UID: {last_uid}")
 
     if last_uid > 0:
-        # Search for emails with a UID strictly greater than last_uid
         status, messages = mail.uid('search', None, f'UID {last_uid + 1}:*')
     else:
-        # FIRST RUN: Start from Sept 5, 2026 as requested
         print("🚀 First run detected. Scanning from Sept 5, 2026 onwards...")
         status, messages = mail.uid('search', None, 'SINCE "05-Sep-2026"')
 
     uids = messages[0].split()
-    
-    # IMAP sometimes returns the highest UID even if it isn't greater, so filter it
     new_uids = [uid for uid in uids if int(uid) > last_uid]
 
     if not new_uids:
@@ -124,21 +120,30 @@ def run_email_agent():
                 sender = msg.get("From")
                 body = get_email_body(msg)
                 
+                # Extract Message-ID to build a direct Gmail link
+                msg_id = msg.get("Message-ID", "")
+                if msg_id:
+                    msg_id_clean = msg_id.strip("<>")
+                    gmail_link = f"https://mail.google.com/mail/u/0/#search/rfc822msgid%3A{msg_id_clean}"
+                else:
+                    gmail_link = "https://mail.google.com/mail/u/0/#inbox"
+                
                 print(f"👀 Scanning: {subject[:40]}...")
                 ai_result = analyze_with_ai(sender, subject, body)
                 
-                time.sleep(4)
                 if ai_result.get("is_job_related"):
                     print(f"✅ Alert Triggered for {ai_result.get('company_name')}")
                     send_alert(
                         ai_result.get("company_name"), 
                         ai_result.get("type"), 
-                        ai_result.get("summary")
+                        ai_result.get("summary"),
+                        gmail_link
                     )
+                    time.sleep(4)
                 else:
                     print(f"❌ Ignored")
+                    time.sleep(4)
 
-    # Save the new highest UID to cache
     os.makedirs("cache", exist_ok=True)
     with open("cache/last_uid.txt", "w") as f:
         f.write(str(highest_uid))
