@@ -7,10 +7,8 @@ import requests
 import google.generativeai as genai
 from dotenv import load_dotenv
 
-# Load env variables (for local testing)
 load_dotenv()
 
-# Configuration
 EMAIL_USER = os.getenv("IMAP_USER")
 EMAIL_PASS = os.getenv("IMAP_PASS")
 GEMINI_KEY = os.getenv("GEMINI_API_KEY")
@@ -65,10 +63,7 @@ def send_alert(company, type_, summary):
         "text": message,
         "parse_mode": "Markdown"
     }
-    
-    response = requests.post(url, json=payload)
-    if response.status_code != 200:
-        print(f"Failed to send Telegram alert: {response.text}")
+    requests.post(url, json=payload)
 
 def run_email_agent():
     print("🔍 Connecting to inbox...")
@@ -76,30 +71,57 @@ def run_email_agent():
     mail.login(EMAIL_USER, EMAIL_PASS)
     mail.select("inbox")
 
-    # Search for UNSEEN emails
-    status, messages = mail.search(None, 'UNSEEN')
-    email_ids = messages[0].split()
+    # Load the last checked UID from GitHub Cache
+    last_uid = 0
+    if os.path.exists("cache/last_uid.txt"):
+        with open("cache/last_uid.txt", "r") as f:
+            content = f.read().strip()
+            if content.isdigit():
+                last_uid = int(content)
+
+    print(f"📂 Last processed UID: {last_uid}")
+
+    if last_uid > 0:
+        # Search for emails with a UID strictly greater than last_uid
+        status, messages = mail.uid('search', None, f'UID {last_uid + 1}:*')
+    else:
+        # FIRST RUN: Start from Sept 5, 2026 as requested
+        print("🚀 First run detected. Scanning from Sept 5, 2026 onwards...")
+        status, messages = mail.uid('search', None, 'SINCE "05-Sep-2026"')
+
+    uids = messages[0].split()
     
-    if not email_ids:
-        print("📭 No new emails to check.")
+    # IMAP sometimes returns the highest UID even if it isn't greater, so filter it
+    new_uids = [uid for uid in uids if int(uid) > last_uid]
+
+    if not new_uids:
+        print("📭 No new emails since last check.")
         mail.logout()
         return
 
-    print(f"📧 Found {len(email_ids)} new emails. Asking AI to analyze...\n")
+    print(f"📧 Found {len(new_uids)} new emails. Asking AI to analyze...\n")
+    highest_uid = last_uid
 
-    for e_id in email_ids:
-        res, msg_data = mail.fetch(e_id, "(RFC822)")
+    for uid in new_uids:
+        uid_int = int(uid)
+        if uid_int > highest_uid:
+            highest_uid = uid_int
+            
+        res, msg_data = mail.uid('fetch', uid, "(RFC822)")
         for response_part in msg_data:
             if isinstance(response_part, tuple):
                 msg = email.message_from_bytes(response_part[1])
                 
-                subject, encoding = decode_header(msg["Subject"])[0]
+                subject_header = decode_header(msg["Subject"])[0]
+                subject = subject_header[0]
+                encoding = subject_header[1]
                 if isinstance(subject, bytes):
-                    subject = subject.decode(encoding if encoding else "utf-8")
+                    subject = subject.decode(encoding if encoding else "utf-8", errors="ignore")
                 
                 sender = msg.get("From")
                 body = get_email_body(msg)
                 
+                print(f"👀 Scanning: {subject[:40]}...")
                 ai_result = analyze_with_ai(sender, subject, body)
                 
                 if ai_result.get("is_job_related"):
@@ -110,8 +132,14 @@ def run_email_agent():
                         ai_result.get("summary")
                     )
                 else:
-                    print(f"❌ Ignored: {subject[:30]}...")
-                    
+                    print(f"❌ Ignored")
+
+    # Save the new highest UID to cache
+    os.makedirs("cache", exist_ok=True)
+    with open("cache/last_uid.txt", "w") as f:
+        f.write(str(highest_uid))
+        
+    print(f"\n💾 Saved highest UID ({highest_uid}) to cache.")
     mail.logout()
 
 if __name__ == "__main__":

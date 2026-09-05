@@ -2,9 +2,8 @@ name: AI Email Agent
 
 on:
   schedule:
-    # Runs every 2 hours
     - cron: '0 */2 * * *'
-  workflow_dispatch: # Allows you to run it manually from the GitHub UI
+  workflow_dispatch:
 
 jobs:
   run-agent:
@@ -19,6 +18,14 @@ jobs:
           
       - name: Install dependencies
         run: pip install -r requirements.txt
+        
+      - name: Restore UID Cache
+        uses: actions/cache@v4
+        with:
+          path: cache/
+          key: uid-cache-${{ github.run_id }}
+          restore-keys: |
+            uid-cache-
         
       - name: Run AI Agent
         env:
