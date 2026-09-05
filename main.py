@@ -46,7 +46,8 @@ def analyze_with_ai(sender, subject, body):
     """
     try:
         response = model.generate_content(prompt)
-        text = response.text.replace("```json", "").replace("```", "").strip()
+        text = response.text.replace("```json", "").replace("```", "").replace("True", "true").replace("False", "false").strip()
+        print(f"🤖 RAW AI OUTPUT: {text}")
         return json.loads(text)
     except Exception as e:
         return {"is_job_related": False, "error": str(e)}
