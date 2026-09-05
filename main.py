@@ -50,6 +50,7 @@ def analyze_with_ai(sender, subject, body):
         print(f"🤖 RAW AI OUTPUT: {text}")
         return json.loads(text)
     except Exception as e:
+        print(f"🚨 EXCEPTION: {e}")
         return {"is_job_related": False, "error": str(e)}
 
 def send_alert(company, type_, summary):
