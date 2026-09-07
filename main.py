@@ -70,10 +70,12 @@ def send_summary_alert(total, job_related, job_details):
             summ = job.get('summary', '')
             link = job.get('link', '')
             
-            message += f"🏢 *{comp}* - {pos}\n"
-            message += f"  ├ *Type:* {t}\n"
-            message += f"  ├ *Details:* {summ}\n"
-            message += f"  └ 🔗 [Open Email in Gmail]({link})\n\n"
+            message += f"🏢 *{comp}*\n"
+            message += f"💼 *Role:* {pos}\n"
+            message += f"📌 *Type:* {t}\n"
+            message += f"📝 *Details:* {summ}\n"
+            message += f"🔗 [Open Email in Gmail]({link})\n\n"
+            message += "──────────────\n\n"
         
     url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
     payload = {
