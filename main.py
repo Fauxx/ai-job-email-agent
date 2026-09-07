@@ -69,6 +69,24 @@ def send_alert(company, type_, summary, link):
     }
     requests.post(url, json=payload)
 
+def send_summary_alert(total, job_related, counts):
+    if not TELEGRAM_TOKEN or not TELEGRAM_CHAT_ID:
+        return
+        
+    if job_related == 0:
+        message = f"📊 *Run Summary*\nProcessed {total} emails.\nNo new job-related emails."
+    else:
+        breakdown = "\n".join([f"- {count} {t}" for t, count in counts.items()])
+        message = f"📊 *Run Summary*\nProcessed {total} emails.\n*Job Related:* {job_related}\n{breakdown}"
+        
+    url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
+    payload = {
+        "chat_id": TELEGRAM_CHAT_ID,
+        "text": message,
+        "parse_mode": "Markdown"
+    }
+    requests.post(url, json=payload)
+
 def run_email_agent():
     print("🔍 Connecting to inbox...")
     mail = imaplib.IMAP4_SSL("imap.gmail.com")
@@ -100,8 +118,13 @@ def run_email_agent():
 
     print(f"📧 Found {len(new_uids)} new emails. Asking AI to analyze...\n")
     highest_uid = last_uid
+    
+    total_processed = 0
+    job_related_count = 0
+    type_counts = {}
 
     for uid in new_uids:
+        total_processed += 1
         uid_int = int(uid)
         if uid_int > highest_uid:
             highest_uid = uid_int
@@ -133,6 +156,11 @@ def run_email_agent():
                 
                 if ai_result.get("is_job_related"):
                     print(f"✅ Alert Triggered for {ai_result.get('company_name')}")
+                    
+                    job_related_count += 1
+                    t = ai_result.get("type", "Unknown")
+                    type_counts[t] = type_counts.get(t, 0) + 1
+                    
                     send_alert(
                         ai_result.get("company_name"), 
                         ai_result.get("type"), 
@@ -143,6 +171,9 @@ def run_email_agent():
                 else:
                     print(f"❌ Ignored")
                     time.sleep(4)
+
+    if total_processed > 0:
+        send_summary_alert(total_processed, job_related_count, type_counts)
 
     os.makedirs("cache", exist_ok=True)
     with open("cache/last_uid.txt", "w") as f:
