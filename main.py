@@ -42,6 +42,7 @@ def analyze_with_ai(sender, subject, body):
         "is_job_related": true/false,
         "type": "Interview" | "Recruiter Reachout" | "Update" | "Rejection" | "Offer" | "None",
         "company_name": "Name of company or N/A",
+        "job_position": "Name of job position/role or N/A",
         "summary": "1 sentence summary of what they want"
     }}
     """
@@ -54,36 +55,32 @@ def analyze_with_ai(sender, subject, body):
         print(f"🚨 EXCEPTION: {e}")
         return {"is_job_related": False, "error": str(e)}
 
-def send_alert(company, type_, summary, link):
-    if not TELEGRAM_TOKEN or not TELEGRAM_CHAT_ID:
-        print("No Telegram credentials configured. Alerting in console only.")
-        return
-        
-    message = f"🚨 *JOB ALERT: {company}* 🚨\n*Type:* {type_}\n*Summary:* {summary}\n\n🔗 [Open Email in Gmail]({link})"
-    url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
-    payload = {
-        "chat_id": TELEGRAM_CHAT_ID,
-        "text": message,
-        "parse_mode": "Markdown",
-        "disable_web_page_preview": True
-    }
-    requests.post(url, json=payload)
-
-def send_summary_alert(total, job_related, counts):
+def send_summary_alert(total, job_related, job_details):
     if not TELEGRAM_TOKEN or not TELEGRAM_CHAT_ID:
         return
         
     if job_related == 0:
         message = f"📊 *Run Summary*\nProcessed {total} emails.\nNo new job-related emails."
     else:
-        breakdown = "\n".join([f"- {count} {t}" for t, count in counts.items()])
-        message = f"📊 *Run Summary*\nProcessed {total} emails.\n*Job Related:* {job_related}\n{breakdown}"
+        message = f"📊 *Run Summary*\nProcessed {total} new emails. Found {job_related} job-related updates.\n\n"
+        for job in job_details:
+            comp = job.get('company_name', 'Unknown')
+            pos = job.get('job_position', 'N/A')
+            t = job.get('type', 'Unknown')
+            summ = job.get('summary', '')
+            link = job.get('link', '')
+            
+            message += f"🏢 *{comp}* - {pos}\n"
+            message += f"  ├ *Type:* {t}\n"
+            message += f"  ├ *Details:* {summ}\n"
+            message += f"  └ 🔗 [Open Email in Gmail]({link})\n\n"
         
     url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
     payload = {
         "chat_id": TELEGRAM_CHAT_ID,
         "text": message,
-        "parse_mode": "Markdown"
+        "parse_mode": "Markdown",
+        "disable_web_page_preview": True
     }
     requests.post(url, json=payload)
 
@@ -121,7 +118,7 @@ def run_email_agent():
     
     total_processed = 0
     job_related_count = 0
-    type_counts = {}
+    job_details = []
 
     for uid in new_uids:
         total_processed += 1
@@ -155,25 +152,17 @@ def run_email_agent():
                 ai_result = analyze_with_ai(sender, subject, body)
                 
                 if ai_result.get("is_job_related"):
-                    print(f"✅ Alert Triggered for {ai_result.get('company_name')}")
-                    
+                    print(f"✅ Job Related: {ai_result.get('company_name')}")
                     job_related_count += 1
-                    t = ai_result.get("type", "Unknown")
-                    type_counts[t] = type_counts.get(t, 0) + 1
-                    
-                    send_alert(
-                        ai_result.get("company_name"), 
-                        ai_result.get("type"), 
-                        ai_result.get("summary"),
-                        gmail_link
-                    )
+                    ai_result['link'] = gmail_link
+                    job_details.append(ai_result)
                     time.sleep(4)
                 else:
                     print(f"❌ Ignored")
                     time.sleep(4)
 
     if total_processed > 0:
-        send_summary_alert(total_processed, job_related_count, type_counts)
+        send_summary_alert(total_processed, job_related_count, job_details)
 
     os.makedirs("cache", exist_ok=True)
     with open("cache/last_uid.txt", "w") as f:
