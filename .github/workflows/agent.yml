@@ -26,6 +26,7 @@ jobs:
           key: uid-cache-${{ github.run_id }}
           restore-keys: |
             uid-cache-
+          save-always: true
         
       - name: Run AI Agent
         env:

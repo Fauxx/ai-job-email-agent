@@ -28,7 +28,7 @@ def get_email_body(msg):
         return msg.get_payload(decode=True).decode(errors="ignore")
     return ""
 
-def analyze_with_ai(sender, subject, body):
+def analyze_with_ai(sender, subject, body, retries=3):
     prompt = f"""
     You are a smart assistant managing a job seeker's inbox. 
     Read the following email and determine if it is related to a job application, an interview, a rejection, or a recruiter reaching out.
@@ -46,14 +46,19 @@ def analyze_with_ai(sender, subject, body):
         "summary": "1 sentence summary of what they want"
     }}
     """
-    try:
-        response = model.generate_content(prompt)
-        text = response.text.replace("```json", "").replace("```", "").replace("True", "true").replace("False", "false").strip()
-        print(f"🤖 RAW AI OUTPUT: {text}")
-        return json.loads(text)
-    except Exception as e:
-        print(f"🚨 EXCEPTION: {e}")
-        return {"is_job_related": False, "error": str(e)}
+    for attempt in range(retries):
+        try:
+            response = model.generate_content(prompt)
+            text = response.text.replace("```json", "").replace("```", "").replace("True", "true").replace("False", "false").strip()
+            print(f"🤖 RAW AI OUTPUT: {text}")
+            return json.loads(text)
+        except Exception as e:
+            if "429" in str(e) and attempt < retries - 1:
+                print(f"⚠️ Rate limit hit. Retrying in 20 seconds... (Attempt {attempt+1}/{retries})")
+                time.sleep(20)
+            else:
+                print(f"🚨 EXCEPTION: {e}")
+                return {"is_job_related": False, "error": str(e)}
 
 def send_summary_alert(total, job_related, job_details):
     if not TELEGRAM_TOKEN or not TELEGRAM_CHAT_ID:
@@ -158,10 +163,10 @@ def run_email_agent():
                     job_related_count += 1
                     ai_result['link'] = gmail_link
                     job_details.append(ai_result)
-                    time.sleep(4)
+                    time.sleep(5)
                 else:
                     print(f"❌ Ignored")
-                    time.sleep(4)
+                    time.sleep(5)
 
     if total_processed > 0:
         send_summary_alert(total_processed, job_related_count, job_details)
