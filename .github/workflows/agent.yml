@@ -19,14 +19,13 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
         
-      - name: Restore UID Cache
-        uses: actions/cache@v4
+      - name: Restore Notified Cache
+        uses: actions/cache/restore@v4
         with:
           path: cache/
-          key: uid-cache-${{ github.run_id }}
+          key: notified-cache-${{ github.run_id }}
           restore-keys: |
-            uid-cache-
-          save-always: true
+            notified-cache-
         
       - name: Run AI Agent
         env:
@@ -36,3 +35,10 @@ jobs:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
         run: python main.py
+
+      - name: Save Notified Cache
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: cache/
+          key: notified-cache-${{ github.run_id }}
