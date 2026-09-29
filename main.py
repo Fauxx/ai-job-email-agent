@@ -11,6 +11,12 @@ from datetime import datetime, timezone
 
 load_dotenv()
 
+def safe_logout(mail):
+    try:
+        mail.logout()
+    except Exception as e:
+        print(f"⚠️ Ignored logout error: {e}")
+
 NOTIFIED_CACHE = "cache/notified_today.json"
 
 def load_notified_cache():
@@ -151,7 +157,7 @@ def run_email_agent():
 
     if not new_uids:
         print("📭 No new emails to process today.")
-        mail.logout()
+        safe_logout(mail)
         return
 
     print(f"📧 Found {len(new_uids)} new emails today. Fetching...")
@@ -193,7 +199,7 @@ def run_email_agent():
 
     if results is None:
         print("🚨 AI call failed entirely. Will retry these emails next run.")
-        mail.logout()
+        safe_logout(mail)
         return  # Don't update cache — emails will be retried
 
     # Process results
@@ -219,7 +225,7 @@ def run_email_agent():
     cache["uids"] = list(notified_set | set(processed_uids))
     save_notified_cache(cache)
     print(f"\n💾 Cached {len(processed_uids)} processed UIDs for today.")
-    mail.logout()
+    safe_logout(mail)
 
 if __name__ == "__main__":
     run_email_agent()
